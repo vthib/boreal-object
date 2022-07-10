@@ -231,7 +231,7 @@ impl pe::ImageFileHeader {
         data: R,
         offset: u64,
     ) -> read::Result<SectionTable<'data>> {
-        SectionTable::parse(self, data, offset)
+        SectionTable::parse(self, data, offset, None)
     }
 
     /// Read the symbol table and string table.
