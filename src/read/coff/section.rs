@@ -15,6 +15,7 @@ use super::{CoffFile, CoffRelocationIterator};
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SectionTable<'data> {
     sections: &'data [pe::ImageSectionHeader],
+    pub(crate) realign_section_raw_data: bool,
 }
 
 impl<'data> SectionTable<'data> {
@@ -26,11 +27,27 @@ impl<'data> SectionTable<'data> {
         header: &pe::ImageFileHeader,
         data: R,
         offset: u64,
+        file_alignment: Option<u32>,
     ) -> Result<Self> {
         let sections = data
             .read_slice_at(offset, header.number_of_sections.get(LE).into())
             .read_error("Invalid COFF/PE section headers")?;
-        Ok(SectionTable { sections })
+
+        // XXX: see
+        // https://github.com/erocarrera/pefile/blob/0d5ce5e0193c878cd57636b438b3746ffc3ae7e3/pefile.py#L7400=
+        //
+        // Basically:
+        // - if alignment is smaller than 0x200, do not align
+        // - if bigger, use 0x200 instead of the given alignment
+        let realign_section_raw_data = match file_alignment {
+            Some(v) if v >= 0x200 => true,
+            _ => false,
+        };
+
+        Ok(SectionTable {
+            sections,
+            realign_section_raw_data,
+        })
     }
 
     /// Iterate over the section headers.
