@@ -16,6 +16,9 @@ pub use section::*;
 mod data_directory;
 pub use data_directory::*;
 
+mod delay_load_import;
+pub use delay_load_import::*;
+
 mod export;
 pub use export::*;
 

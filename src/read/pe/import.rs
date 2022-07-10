@@ -121,7 +121,7 @@ impl<'data> ImportDescriptorIterator<'data> {
 /// These may be in the import lookup table, or the import address table.
 #[derive(Debug, Clone)]
 pub struct ImportThunkList<'data> {
-    data: Bytes<'data>,
+    pub(super) data: Bytes<'data>,
 }
 
 impl<'data> ImportThunkList<'data> {
