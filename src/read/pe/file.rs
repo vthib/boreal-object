@@ -634,7 +634,8 @@ pub trait ImageNtHeaders: Debug + Pod {
         data: R,
         offset: u64,
     ) -> read::Result<SectionTable<'data>> {
-        SectionTable::parse(self.file_header(), data, offset)
+        let file_alignment = self.optional_header().file_alignment();
+        SectionTable::parse(self.file_header(), data, offset, Some(file_alignment))
     }
 
     /// Read the COFF symbol table and string table.
