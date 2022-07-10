@@ -321,7 +321,7 @@ impl<'data> SectionTable<'data> {
         va: u32,
     ) -> Option<(&'data [u8], u32)> {
         self.iter()
-            .find_map(|section| section.pe_data_containing(data, va))
+            .find_map(|section| section.pe_data_containing(data, va, self.realign_section_raw_data))
     }
 
     /// Return the section that contains a given virtual address.
@@ -403,12 +403,16 @@ impl pe::ImageSectionHeader {
         &self,
         data: R,
         va: u32,
+        realign_section_raw_data: bool,
     ) -> Option<(&'data [u8], u32)> {
         let section_va = self.virtual_address.get(LE);
         let offset = va.checked_sub(section_va)?;
-        let (section_offset, section_size) = self.pe_file_range();
+        let (mut section_offset, section_size) = self.pe_file_range();
         // Address must be within section (and not at its end).
         if offset < section_size {
+            if realign_section_raw_data {
+                section_offset -= section_offset % 0x200;
+            }
             let section_data = data
                 .read_bytes_at(section_offset.into(), section_size.into())
                 .ok()?;
