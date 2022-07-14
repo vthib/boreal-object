@@ -91,12 +91,15 @@ where
 
     #[inline]
     fn file_range(&self) -> (u64, u64) {
-        let (offset, size) = self.section.pe_file_range();
+        let (offset, size) = self
+            .section
+            .pe_file_range(self.file.realign_section_raw_datas());
         (u64::from(offset), u64::from(size))
     }
 
     fn data(&self) -> Result<&'data [u8]> {
-        self.section.pe_data(self.file.data)
+        self.section
+            .pe_data(self.file.data, self.file.realign_section_raw_datas())
     }
 
     fn data_range(&self, address: u64, size: u64) -> Result<Option<&'data [u8]>> {
@@ -223,7 +226,9 @@ where
 
     #[inline]
     fn file_range(&self) -> Option<(u64, u64)> {
-        let (offset, size) = self.section.pe_file_range();
+        let (offset, size) = self
+            .section
+            .pe_file_range(self.file.realign_section_raw_datas());
         if size == 0 {
             None
         } else {
@@ -232,7 +237,8 @@ where
     }
 
     fn data(&self) -> Result<&'data [u8]> {
-        self.section.pe_data(self.file.data)
+        self.section
+            .pe_data(self.file.data, self.file.realign_section_raw_datas())
     }
 
     fn data_range(&self, address: u64, size: u64) -> Result<Option<&'data [u8]>> {
@@ -299,7 +305,8 @@ impl<'data> SectionTable<'data> {
     ///
     /// Returns `None` if no section contains the address.
     pub fn pe_file_range_at(&self, va: u32) -> Option<(u32, u32)> {
-        self.iter().find_map(|section| section.pe_file_range_at(va))
+        self.iter()
+            .find_map(|section| section.pe_file_range_at(va, self.realign_section_raw_data))
     }
 
     /// Return the data starting at the given virtual address, up to the end of the
@@ -309,7 +316,8 @@ impl<'data> SectionTable<'data> {
     ///
     /// Returns `None` if no section contains the address.
     pub fn pe_data_at<R: ReadRef<'data>>(&self, data: R, va: u32) -> Option<&'data [u8]> {
-        self.iter().find_map(|section| section.pe_data_at(data, va))
+        self.iter()
+            .find_map(|section| section.pe_data_at(data, va, self.realign_section_raw_data))
     }
 
     /// Return the data of the section that contains the given virtual address in a PE file.
@@ -336,9 +344,12 @@ impl pe::ImageSectionHeader {
     /// Return the offset and size of the section in a PE file.
     ///
     /// The size of the range will be the minimum of the file size and virtual size.
-    pub fn pe_file_range(&self) -> (u32, u32) {
+    pub fn pe_file_range(&self, realign_section_raw_data: bool) -> (u32, u32) {
         // Pointer and size will be zero for uninitialized data; we don't need to validate this.
-        let offset = self.pointer_to_raw_data.get(LE);
+        let mut offset = self.pointer_to_raw_data.get(LE);
+        if realign_section_raw_data {
+            offset -= offset % 0x200;
+        }
         let size = cmp::min(self.virtual_size.get(LE), self.size_of_raw_data.get(LE));
         (offset, size)
     }
@@ -347,10 +358,10 @@ impl pe::ImageSectionHeader {
     /// to the end of the section.
     ///
     /// Returns `None` if the section does not contain the address.
-    pub fn pe_file_range_at(&self, va: u32) -> Option<(u32, u32)> {
+    pub fn pe_file_range_at(&self, va: u32, realign_section_raw_data: bool) -> Option<(u32, u32)> {
         let section_va = self.virtual_address.get(LE);
         let offset = va.checked_sub(section_va)?;
-        let (section_offset, section_size) = self.pe_file_range();
+        let (section_offset, section_size) = self.pe_file_range(realign_section_raw_data);
         // Address must be within section (and not at its end).
         if offset < section_size {
             Some((section_offset.checked_add(offset)?, section_size - offset))
@@ -367,8 +378,12 @@ impl pe::ImageSectionHeader {
     /// Return the section data in a PE file.
     ///
     /// The length of the data will be the minimum of the file size and virtual size.
-    pub fn pe_data<'data, R: ReadRef<'data>>(&self, data: R) -> Result<&'data [u8]> {
-        let (offset, size) = self.pe_file_range();
+    pub fn pe_data<'data, R: ReadRef<'data>>(
+        &self,
+        data: R,
+        realign_section_raw_data: bool,
+    ) -> Result<&'data [u8]> {
+        let (offset, size) = self.pe_file_range(realign_section_raw_data);
         data.read_bytes_at(offset.into(), size.into())
             .read_error("Invalid PE section offset or size")
     }
@@ -379,8 +394,13 @@ impl pe::ImageSectionHeader {
     /// Ignores sections with invalid data.
     ///
     /// Returns `None` if the section does not contain the address.
-    pub fn pe_data_at<'data, R: ReadRef<'data>>(&self, data: R, va: u32) -> Option<&'data [u8]> {
-        let (offset, size) = self.pe_file_range_at(va)?;
+    pub fn pe_data_at<'data, R: ReadRef<'data>>(
+        &self,
+        data: R,
+        va: u32,
+        realign_section_raw_data: bool,
+    ) -> Option<&'data [u8]> {
+        let (offset, size) = self.pe_file_range_at(va, realign_section_raw_data)?;
         data.read_bytes_at(offset.into(), size.into()).ok()
     }
 
@@ -409,12 +429,9 @@ impl pe::ImageSectionHeader {
     ) -> Option<(&'data [u8], u32)> {
         let section_va = self.virtual_address.get(LE);
         let offset = va.checked_sub(section_va)?;
-        let (mut section_offset, section_size) = self.pe_file_range();
+        let (section_offset, section_size) = self.pe_file_range(realign_section_raw_data);
         // Address must be within section (and not at its end).
         if offset < section_size {
-            if realign_section_raw_data {
-                section_offset -= section_offset % 0x200;
-            }
             let section_data = data
                 .read_bytes_at(section_offset.into(), section_size.into())
                 .ok()?;

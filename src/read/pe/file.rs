@@ -118,6 +118,10 @@ where
     pub(super) fn section_alignment(&self) -> u64 {
         u64::from(self.nt_headers.optional_header().section_alignment())
     }
+
+    pub(super) fn realign_section_raw_datas(&self) -> bool {
+        self.nt_headers.optional_header().file_alignment() >= 0x200
+    }
 }
 
 impl<'data, Pe, R> read::private::Sealed for PeFile<'data, Pe, R>
