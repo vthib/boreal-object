@@ -429,12 +429,11 @@ impl pe::ImageSectionHeader {
     }
 
     /// Return the raw section name.
+    ///
+    /// This is the 8 bytes reserved for the name, without any truncating after any nul byte. This
+    /// is left to the caller to handle.
     pub fn raw_name(&self) -> &[u8] {
-        let bytes = &self.name;
-        match memchr::memchr(b'\0', bytes) {
-            Some(end) => &bytes[..end],
-            None => &bytes[..],
-        }
+        &self.name
     }
 
     /// Return the offset and size of the section in a COFF file.
