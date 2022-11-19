@@ -159,6 +159,21 @@ impl ResourceName {
             .read_slice::<u16>(&mut offset, len.get(LE).into())
             .read_error("Invalid resource name length")
     }
+
+    /// Returns the string buffer as raw bytes.
+    pub fn raw_data<'data>(&self, directory: ResourceDirectory<'data>) -> Result<&'data [u8]> {
+        let mut offset = u64::from(self.offset);
+        let len = directory
+            .data
+            .read::<U16<LE>>(&mut offset)
+            .read_error("Invalid resource name offset")?;
+        // This is a length of the u16 string, multiply by 2 to get the length in bytes.
+        let len = u64::from(len.get(LE)) * 2;
+        directory
+            .data
+            .read_bytes(&mut offset, len)
+            .read_error("Invalid resource name length")
+    }
 }
 
 /// A resource name or ID.
