@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use core::{cmp, iter, slice, str};
+use core::{iter, slice, str};
 
 use crate::endian::LittleEndian as LE;
 use crate::pe;
@@ -356,8 +356,7 @@ impl pe::ImageSectionHeader {
         if realign_section_raw_data {
             offset -= offset % 0x200;
         }
-        let size = cmp::min(self.virtual_size.get(LE), self.size_of_raw_data.get(LE));
-        (offset, size)
+        (offset, self.size_of_raw_data.get(LE))
     }
 
     /// Return the file offset of the given virtual address, and the remaining size up
@@ -368,6 +367,13 @@ impl pe::ImageSectionHeader {
         let section_va = self.virtual_address.get(LE);
         let offset = va.checked_sub(section_va)?;
         let (section_offset, section_size) = self.pe_file_range(realign_section_raw_data);
+        let mut vsize = self.virtual_size.get(LE);
+        if vsize == 0 {
+            vsize = section_size;
+        }
+        if offset >= vsize {
+            return None;
+        }
         // Address must be within section (and not at its end).
         if offset < section_size {
             Some((section_offset.checked_add(offset)?, section_size - offset))
