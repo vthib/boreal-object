@@ -367,10 +367,7 @@ impl pe::ImageSectionHeader {
         let section_va = self.virtual_address.get(LE);
         let offset = va.checked_sub(section_va)?;
         let (section_offset, section_size) = self.pe_file_range(realign_section_raw_data);
-        let mut vsize = self.virtual_size.get(LE);
-        if vsize == 0 {
-            vsize = section_size;
-        }
+        let vsize = core::cmp::max(self.virtual_size.get(LE), section_size);
         if offset >= vsize {
             return None;
         }
